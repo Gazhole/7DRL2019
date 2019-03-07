@@ -3,14 +3,17 @@ from collections import namedtuple
 from random import choice, shuffle
 from copy import deepcopy
 from message_log import Message
+from enum import Enum
+from entities import Actor, Item
+from components import Fighter, BasicMonster, Weapon
+from templates import monsters_list
 
+# Colours
 colours = namedtuple("colours", ["light_wall", "dark_wall", "light_ground", "dark_ground"])
 white = colours((250, 250, 250), (180, 180, 180), (110, 110, 110), (40, 40, 40))
 red = colours((250, 65, 65), (180, 45, 45), (110, 30, 30), (40, 10, 10))
 blue = colours((65, 125, 250), (45, 90, 180), (30, 60, 110), (10, 20, 40))
 green = colours((0, 250, 0), (0, 180, 0), (0, 110, 0), (0, 40, 0))
-
-colour_choices = [white, red, blue, green]
 
 
 class Rect:
@@ -41,8 +44,7 @@ class GameMap:
                 self.rooms_index[self.rooms[x][y].room_id] = {"map_x": x, "map_y": y}
 
     # This moves the rooms around the map.
-    # TODO how is this going to effect entity placement? At the moment location is stored in the entity itself.
-    def shuffle_rooms(self, player):
+    def shuffle_rooms(self, player, entities):
         viable_coordinates = []
 
         # Append an x,y for each location in the game map.
@@ -73,18 +75,23 @@ class GameMap:
 
         message = Message("You feel an odd sensation of movement...")
 
-        # # This just checks whether all the rooms are unique based on their code.
-        # print_rooms = []
-        # for y in range(self.map_height):
-        #     for x in range(self.map_width):
-        #         print_rooms.append(self.rooms[x][y].room_id)
-        # print(sorted(print_rooms))
+        for entity in entities:
+            if entity is player:
+                continue
+            else:
+                entity.set_map_position(self)
 
         return message
 
 
+class RoomTypes(Enum):
+    COMBAT_ROOM = 0
+    PUZZLE_ROOM = 1
+    TRAP_ROOM = 2
+
+
 class Room(Map):
-    def __init__(self, room_width, room_height, map_x, map_y, room_id):
+    def __init__(self, room_width, room_height, map_x, map_y, room_id,):
         super().__init__(room_width, room_height)
         self.room_id = room_id
         self.position_in_map = (map_x, map_y)
@@ -93,18 +100,80 @@ class Room(Map):
         self.room_height = room_height
 
         self.explored = [[False for room_y in range(self.room_height)] for room_x in range(self.room_width)]
+        self.colours = None
 
-        self.create_basic_room_layout()
-        self.colours = choice(colour_choices)
+        if room_id == "22":
+            self.room_type = "exit"
+        else:
+            self.room_type = choice([RoomTypes.COMBAT_ROOM, RoomTypes.PUZZLE_ROOM, RoomTypes.TRAP_ROOM])
 
-    def create_basic_room_layout(self):
-        north_door = Rect(13, 0, 4, 4)
-        south_door = Rect(13, 26, 4, 4)
-        east_door = Rect(26, 13, 4, 4)
-        west_door = Rect(0, 13, 4, 4)
-        main_area = Rect(4, 4, 22, 22)
 
-        to_carve = [north_door, east_door, south_door, west_door, main_area]
+def create_rooms(game_map, map_width, map_height, entities):
+    for map_y in range(map_height):
+        for map_x in range(map_width):
+            room = game_map.rooms[map_x][map_y]
+            create_basic_room_layout(room)
 
-        for area in to_carve:
-            area.carve_rect(self)
+            if room.room_type == "exit":
+                create_exit_room(game_map, room, entities)
+
+            elif room.room_type == RoomTypes.TRAP_ROOM:
+                create_trap_room(game_map, room, entities)
+
+            elif room.room_type == RoomTypes.PUZZLE_ROOM:
+                create_puzzle_room(game_map, room, entities)
+
+            elif room.room_type == RoomTypes.COMBAT_ROOM:
+                create_combat_room(game_map, room, entities)
+
+
+def create_basic_room_layout(room):
+    north_door = Rect(13, 0, 4, 4)
+    south_door = Rect(13, 26, 4, 4)
+    east_door = Rect(26, 13, 4, 4)
+    west_door = Rect(0, 13, 4, 4)
+    main_area = Rect(4, 4, 22, 22)
+
+    to_carve = [north_door, east_door, south_door, west_door, main_area]
+
+    for area in to_carve:
+        area.carve_rect(room)
+
+
+def create_exit_room(game_map, room, entities):
+    room.colours = white
+
+
+def create_trap_room(game_map, room, entities):
+    room.colours = blue
+
+
+def create_puzzle_room(game_map, room, entities):
+    room.colours = green
+
+
+def create_combat_room(game_map, room, entities):
+    room.colours = red
+
+    # TODO: this is a placeholder to test monsters. need to write a "place entities" function
+    # TODO: check whether there is an entity already at this location.
+    x = 14
+    y = 14
+    monster_template = choice(monsters_list)
+    monster = pick_monster(game_map, room.room_id, x, y, monster_template)
+    entities.append(monster)  # This is that list from engine with just the player in it.
+
+
+def pick_monster(game_map, room_id, room_x, room_y, monster_template):
+        name, char, colour, hits, weapon = monster_template
+
+        weapon_name, weapon_char, weapon_colour, weapon_power, weapon_uses = weapon
+
+        weapon_stats = Weapon(weapon_power, weapon_uses)
+        monster_weapon = Item(game_map, room_id, room_x, room_y, weapon_name, weapon_char, weapon_colour, weapon=weapon_stats)
+
+        fighter_component = Fighter(hits, left_hand=monster_weapon)
+        ai_component = BasicMonster()
+        monster = Actor(game_map, room_id, room_x, room_y, name, char, colour, fighter=fighter_component, ai=ai_component)
+
+        return monster

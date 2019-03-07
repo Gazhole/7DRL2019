@@ -19,6 +19,15 @@ def handle_keys(user_input):
     elif key_char == 'x':
         return {'move': (1, 1)}
 
+    elif user_input.key == "LEFT":
+        return {'select_hand': "left"}
+    elif user_input.key == "RIGHT":
+        return {'select_hand': "right"}
+    elif user_input.key == "DOWN":
+        return {'drop_item': True}
+    elif user_input.key == "UP":
+        return {'pickup_item': True}
+
     if user_input.key == 'ESCAPE':
         # Exit the game
         return {'exit_game': True}

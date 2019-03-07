@@ -7,6 +7,34 @@ class RenderOrder(Enum):
     ACTOR = 3
 
 
+def render_status_blobs(panel, x, y, current_value, maximum_value, fg_colour, bg_colour):
+    x = x
+    for i in range(maximum_value):
+        panel.draw_str(x, y, " ", None, bg_colour)
+        panel.draw_str(x + 1, y, " ", None, (0, 0, 0))
+        if current_value > i:
+            panel.draw_str(x, y, " ", None, fg_colour)
+            panel.draw_str(x + 1, y, " ", None, (0, 0, 0))
+        x += 2
+
+
+def render_status_bar(panel, x, y, width, current_value, maximum_value, bar_colour, back_colour):
+    if maximum_value == 0:
+        bar_width = width
+    else:
+        bar_width = int(float(current_value) / maximum_value * width)
+
+        if bar_width == 0 and current_value > 0:  # This avoids rounding errors where the bar is indicating 0 but the value isnt
+            bar_width = 1
+
+    # draw background
+    panel.draw_rect(x , y, width, 1, None, bg=back_colour)
+
+    # draw the remaining total bar on top
+    if bar_width > 0:
+        panel.draw_rect(x, y, bar_width, 1, None, bg=bar_colour)
+
+
 def render_all(consoles, game_map, entities, player, fov_recompute, message_log):
 
     # Unpack consoles
@@ -41,25 +69,62 @@ def render_all(consoles, game_map, entities, player, fov_recompute, message_log)
                     view_port_console.draw_char(x, y, ground_char, bg=None, fg=dark_ground)
 
     # Draw all entities in the list
-    entities_in_render_order = sorted(entities, key=lambda x: x.render_order.value)
+    entities_in_this_room = []
+    for entity in entities:
+        if entity.map_x == player.map_x and entity.map_y == player.map_y:
+            entities_in_this_room.append(entity)
+
+    entities_in_render_order = sorted(entities_in_this_room, key=lambda x: x.render_order.value)
 
     for entity in entities_in_render_order:
         draw_entity(view_port_console, entity, game_map.rooms[player.map_x][player.map_y].fov)
 
     # Now blit the view port console onto the root console.
-    root_console.blit(view_port_console, 1, 11, 30, 30, 0, 0)
+    root_console.blit(view_port_console, 11, 11, 30, 30, 0, 0)
     view_port_console.clear()
 
     # Draw stuff on top panel
     top_panel_console.clear(fg=(255, 255, 255), bg=(0, 0, 0))
-    room_coordinates = "(" + str(player.map_x) + "," + str(player.map_y) + ")"
-    room_id = game_map.rooms[player.map_x][player.map_y].room_id
 
-    top_panel_console.draw_str(0, 5, room_coordinates, fg=(255, 255, 255), bg=None)
-    top_panel_console.draw_str(0, 6, room_id, fg=(255, 255, 255), bg=None)
+    top_panel_console.draw_str(0, 0, player.name, fg=(255, 255, 255), bg=None)
+
+    # TODO is there a bug with displaying player health?
+    top_panel_console.draw_str(0, 2, "Hits: ", fg=(255, 255, 255), bg=None)
+    render_status_blobs(top_panel_console, 6, 2, player.fighter.hits, player.fighter.max_hits, (200, 0, 0), (255, 255, 255))
+
+    # Equipment
+    if player.fighter.right_hand:
+        rh_name = player.fighter.right_hand.name
+        if player.fighter.right_hand.weapon:
+            rh_uses = player.fighter.right_hand.weapon.uses
+            rh_max_uses = player.fighter.right_hand.weapon.max_uses
+            render_status_bar(top_panel_console, 13, 5, 5, rh_uses, rh_max_uses, (255, 255, 255), (0, 0, 0))
+    else:
+        rh_name = ""
+
+    if player.fighter.left_hand:
+        lh_name = player.fighter.left_hand.name
+        if player.fighter.left_hand.weapon:
+            lh_uses = player.fighter.left_hand.weapon.uses
+            lh_max_uses = player.fighter.left_hand.weapon.max_uses
+            render_status_bar(top_panel_console, 13, 4, 5, lh_uses, lh_max_uses, (255, 255, 255), (0, 0, 0))
+    else:
+        lh_name = ""
+
+    if player.fighter.selected_hand == "right":
+        top_panel_console.draw_str(0, 4, "Left Hand : ", fg=(255, 255, 255), bg=None)
+        top_panel_console.draw_str(19, 4, lh_name, fg=(255, 255, 255), bg=(0, 0, 0))
+        top_panel_console.draw_str(0, 5, "Right Hand: ", fg=(0, 0, 0), bg=(0, 200, 0))
+        top_panel_console.draw_str(19, 5, rh_name, fg=(0, 0, 0), bg=(0, 200, 0))
+
+    elif player.fighter.selected_hand == "left":
+        top_panel_console.draw_str(0, 4, "Left Hand : ", fg=(0, 0, 0), bg=(0, 200, 0))
+        top_panel_console.draw_str(19, 4, lh_name, fg=(0, 0, 0), bg=(0, 200, 0))
+        top_panel_console.draw_str(0, 5, "Right Hand: ", fg=(255, 255, 255), bg=None)
+        top_panel_console.draw_str(19, 5, rh_name, fg=(255, 255, 255), bg=(0, 0, 0))
 
     # blit top panel to root
-    root_console.blit(top_panel_console, 1, 1, 30, 10, 0, 0)
+    root_console.blit(top_panel_console, 1, 1, 42, 10, 0, 0)
 
     # Draw stuff on bottom panel
     bottom_panel_console.clear(fg=(255, 255, 255), bg=(0, 0, 0))
@@ -71,7 +136,7 @@ def render_all(consoles, game_map, entities, player, fov_recompute, message_log)
         y += 1
 
     # Blit the bottom panel onto the root console.
-    root_console.blit(bottom_panel_console, 1, 42, 30, 10, 0, 0)
+    root_console.blit(bottom_panel_console, 1, 42, 50, 10, 0, 0)
 
 
 def clear_all(view_port_console, entities):  # This is dirty...

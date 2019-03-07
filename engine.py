@@ -1,14 +1,16 @@
 import tdl
-from map_functions import GameMap
-from entities import Actor, get_blocking_entities_at_location
+from map_functions import GameMap, create_rooms
+from entities import Actor, Item, get_blocking_entities_at_location
 from game_states import GameStates
 from render import render_all, clear_all
 from input_functions import handle_keys
 from message_log import MessageLog
+from death_functions import kill_monster, kill_player
+from components import Fighter, Weapon
 
 
 def main():
-    tdl.set_font('lucida12x12.png', greyscale=True, altLayout=True)  # Load the font from a png.
+    tdl.set_font('terminal16x16.png', greyscale=True, altLayout=False)  # Load the font from a png.
     tdl.set_fps(100)
 
     map_width = 5
@@ -17,20 +19,26 @@ def main():
     room_width = 30
     room_height = 30
 
-    screen_width = room_width + 2
+    screen_width = room_width + 22
     screen_height = room_height + 22
 
     root_console = tdl.init(screen_width, screen_height, title='7DRL 2019')
-    top_panel_console = tdl.Console(room_width, 10)
+    top_panel_console = tdl.Console(screen_width, 10)
     view_port_console = tdl.Console(room_width, room_height)
-    bottom_panel_console = tdl.Console(room_width, 10)
-    message_log = MessageLog(0, 0, room_width, 10)
+    bottom_panel_console = tdl.Console(screen_width, 10)
+    message_log = MessageLog(0, 0, screen_width, 9)
+
+    entities = []
 
     game_map = GameMap(map_width, map_height)
-    player = Actor(game_map, "22", 15, 15, "Bolly", "@", (255, 255, 255))
+    create_rooms(game_map, map_width, map_height, entities)
+    sword_stats = Weapon(2, 10)
+    player_weapon = Item(game_map, "22", 0, 0, "Sword", "|", (255, 255, 255), weapon=sword_stats)
+    player_stats = Fighter(hits=20, left_hand=player_weapon)
+    player = Actor(game_map, "22", 15, 15, "Player", "@", (255, 255, 255), fighter=player_stats)
+    entities.append(player)
 
     all_consoles = [root_console, view_port_console, bottom_panel_console, top_panel_console]
-    entities = [player]
 
     fov_algorithm = "BASIC"
     fov_light_walls = True
@@ -65,10 +73,31 @@ def main():
 
         move = action.get('move')
         exit_game = action.get('exit_game')
+        select_hand = action.get('select_hand')
+        drop_item = action.get('drop_item')
+        pickup_item = action.get('pickup_item')
         shuffle_rooms = action.get('shuffle_rooms')
 
+        player_turn_results = []
+
         if shuffle_rooms:
-            message = game_map.shuffle_rooms(player)
+            message = game_map.shuffle_rooms(player, entities)
+            message_log.add_message(message)
+            fov_recompute = True
+
+        # TODO at the moment these functions are doing all the leg work and player_turn_results isn't used. Rectify.
+
+        if select_hand and game_state == GameStates.PLAYER_TURN:
+            player.fighter.selected_hand = select_hand
+            fov_recompute = True
+
+        if drop_item and game_state == GameStates.PLAYER_TURN:
+            message = player.fighter.drop_item(game_map, entities)
+            message_log.add_message(message)
+            fov_recompute = True
+
+        if pickup_item and game_state == GameStates.PLAYER_TURN:
+            message = player.fighter.pickup_item(entities)
             message_log.add_message(message)
             fov_recompute = True
 
@@ -77,8 +106,6 @@ def main():
             destination_room_x = player.room_x + dx
             destination_room_y = player.room_y + dy
 
-            # Check whether we need to transition between rooms.
-            # TODO build this into the move method for Actors.
             if destination_room_x < 0:
                 dx = 0
 
@@ -122,17 +149,71 @@ def main():
                 player.room_y = 0
 
             if game_map.rooms[player.map_x][player.map_y].walkable[destination_room_x, destination_room_y]:
-                target = get_blocking_entities_at_location(entities, destination_room_x, destination_room_y)
+                target = get_blocking_entities_at_location(entities, player.map_x, player.map_y, destination_room_x, destination_room_y)
 
                 if target:  # Combat here
-                    pass
+                    attack_results = player.fighter.attack(target)
+                    player_turn_results.extend(attack_results)  # Add the result of the last turn to the list
+                    fov_recompute = True
 
                 else:
                     player.move(dx, dy)  # Or just move
+                    player.set_current_room(game_map)
                     fov_recompute = True
+
+                game_state = GameStates.ENEMY_TURN  # Switch over the enemy's turn.
 
         if exit_game:
             return True
+
+        for player_turn_result in player_turn_results:
+            message = player_turn_result.get("message")  # Pull any messages
+            dead_entity = player_turn_result.get("dead")  # Or anything that died
+
+            if message:
+                message_log.add_message(message)  # Add the message (if any) to the message log to print on screen.
+
+            if dead_entity:  # If anything died...
+                if dead_entity == player:
+                    message, game_state = kill_player(dead_entity)  # Game over
+                else:
+                    message = kill_monster(dead_entity)  # Print a death message for monster, add exp
+
+                message_log.add_message(message)  # Print messages to screen.
+
+        player_turn_results.clear()  # Clear ready for next turn.
+
+        if game_state == GameStates.ENEMY_TURN:
+            for entity in entities:
+                if entity.map_x == player.map_x and entity.map_y == player.map_y:
+                    if entity.ai:  # If the entity has some intelligence (monsters, npc)
+                        enemy_turn_results = entity.ai.take_turn(player, game_map, entities)
+
+                        for enemy_turn_result in enemy_turn_results:  # Same deal as the player turns
+                            message = enemy_turn_result.get("message")
+                            dead_entity = enemy_turn_result.get("dead")
+
+                            if message:
+                                message_log.add_message(message)
+
+                            if dead_entity:
+                                if dead_entity == player:
+                                    message, game_state = kill_player(dead_entity)
+                                else:
+                                    message = kill_monster(dead_entity)
+
+                                message_log.add_message(message)
+
+                            if game_state == GameStates.PLAYER_DEAD:
+                                break
+
+                        enemy_turn_results.clear()
+
+                    if game_state == GameStates.PLAYER_DEAD:
+                        break
+
+            else:
+                game_state = GameStates.PLAYER_TURN
 
 
 if __name__ == "__main__":

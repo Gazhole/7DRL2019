@@ -1,0 +1,11 @@
+
+MAP:
+- Monster placement function.
+- Item placement function.
+- Room type generation sequences.
+
+
+ENGINE:
+- Tidy up turn results and messages.
+- A way to win the game.
+- Main menu.
