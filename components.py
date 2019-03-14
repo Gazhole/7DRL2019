@@ -94,20 +94,20 @@ class Fighter:
             active_hand.weapon.uses -= 1
 
         if damage > 0:
-            results.append({"message": Message('{0} attacks {1} for {2} hit points.'
+            results.append({"message": Message('{} attacks {} ({})'
                                                .format(self.owner.name.capitalize(), target.name.capitalize(), str(damage)),
                                                (255, 255, 255))})
             results.extend(target.fighter.take_damage(damage))
         else:
-            results.append({"message": Message('{0} attacks {1} but does no damage.'
+            results.append({"message": Message('{} attacks without a weapon (0)'
                                                .format(self.owner.name.capitalize(), target.name), (255, 255, 255))})
 
         if not active_hand:
             pass
         elif active_hand.weapon.uses <= 0:
             item_name = active_hand.name
-            results.append({"message": Message('The {} breaks!'
-                                               .format(item_name), (255, 255, 255))})
+            results.append({"message": Message("{}'s {} breaks!"
+                                               .format(self.owner.name, item_name), (255, 255, 255))})
             self.discard_item()
 
         return results

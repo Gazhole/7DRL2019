@@ -12,6 +12,7 @@ def kill_player(player):
     return Message("You died.", (255, 255, 255)), GameStates.PLAYER_DEAD
 
 
+# TODO: monsters drop items when they die!
 def kill_monster(monster):
     death_message = Message("The {0} dies!".format(monster.name.capitalize()), (255, 255, 255))
 

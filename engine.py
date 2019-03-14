@@ -1,5 +1,5 @@
 import tdl
-from map_functions import GameMap, create_rooms
+from map_system_2 import GameMap, generate_map
 from entities import Actor, Item, get_blocking_entities_at_location
 from game_states import GameStates
 from render import render_all, clear_all
@@ -8,13 +8,12 @@ from message_log import MessageLog
 from death_functions import kill_monster, kill_player
 from components import Fighter, Weapon
 
-
 def main():
     tdl.set_font('terminal16x16.png', greyscale=True, altLayout=False)  # Load the font from a png.
     tdl.set_fps(100)
 
-    map_width = 5
-    map_height = 5
+    map_width = 20
+    map_height = 20
 
     room_width = 30
     room_height = 30
@@ -31,18 +30,20 @@ def main():
     entities = []
 
     game_map = GameMap(map_width, map_height)
-    create_rooms(game_map, map_width, map_height, entities)
+
     sword_stats = Weapon(2, 10)
-    player_weapon = Item(game_map, "22", 0, 0, "Sword", "|", (255, 255, 255), weapon=sword_stats)
-    player_stats = Fighter(hits=20, left_hand=player_weapon)
-    player = Actor(game_map, "22", 15, 15, "Player", "@", (255, 255, 255), fighter=player_stats)
+    player_weapon = Item(game_map, "0x0", 0, 0, "Sword", "|", (255, 255, 255), weapon=sword_stats)
+    player_stats = Fighter(hits=10, left_hand=player_weapon)
+    player = Actor(game_map, "2x2", 15, 10, "Player", "@", (255, 255, 255), fighter=player_stats)
     entities.append(player)
+
+    generate_map(game_map, entities, player)
 
     all_consoles = [root_console, view_port_console, bottom_panel_console, top_panel_console]
 
     fov_algorithm = "BASIC"
     fov_light_walls = True
-    fov_radius = 10
+    fov_radius = 50
     fov_recompute = True
 
     game_state = GameStates.PLAYER_TURN
@@ -94,11 +95,13 @@ def main():
         if drop_item and game_state == GameStates.PLAYER_TURN:
             message = player.fighter.drop_item(game_map, entities)
             message_log.add_message(message)
+            game_state = GameStates.ENEMY_TURN
             fov_recompute = True
 
         if pickup_item and game_state == GameStates.PLAYER_TURN:
             message = player.fighter.pickup_item(entities)
             message_log.add_message(message)
+            game_state = GameStates.ENEMY_TURN
             fov_recompute = True
 
         if move and game_state == GameStates.PLAYER_TURN:
@@ -159,6 +162,10 @@ def main():
                 else:
                     player.move(dx, dy)  # Or just move
                     player.set_current_room(game_map)
+
+                    # TODO: Bug with the new room layouts - some cause change of room to break.
+                    print("MapPos: ", player.map_x, ",", player.map_y, end=" / ")
+                    print("RoomPos: ", player.room_x, ",", player.room_y)
                     fov_recompute = True
 
                 game_state = GameStates.ENEMY_TURN  # Switch over the enemy's turn.

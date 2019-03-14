@@ -7,14 +7,21 @@ class RenderOrder(Enum):
     ACTOR = 3
 
 
-def render_status_blobs(panel, x, y, current_value, maximum_value, fg_colour, bg_colour):
+def render_status_blocks(panel, x, y, current_value, maximum_value, fg_colour, bg_colour):
     x = x
     for i in range(maximum_value):
         panel.draw_str(x, y, " ", None, bg_colour)
-        panel.draw_str(x + 1, y, " ", None, (0, 0, 0))
-        if current_value > i:
+        if current_value - 1 >= i:
             panel.draw_str(x, y, " ", None, fg_colour)
-            panel.draw_str(x + 1, y, " ", None, (0, 0, 0))
+        x += 2
+
+
+def render_status_characters(panel, x, y, current_value, maximum_value, char_code, fg_colour, bg_colour):
+    x = x
+    for i in range(maximum_value):
+        panel.draw_char(x, y, char_code, bg_colour, None)
+        if current_value - 1 >= i:
+            panel.draw_char(x, y, char_code, fg_colour, None)
         x += 2
 
 
@@ -40,9 +47,11 @@ def render_all(consoles, game_map, entities, player, fov_recompute, message_log)
     # Unpack consoles
     root_console, view_port_console, bottom_panel_console, top_panel_console = consoles
 
-    # Load tile characters from map file:
-    ground_char = "+"
-    wall_char = "#"
+    # Single cross = 197, double cross = 206
+    # texblock = 177
+
+    ground_char = 197
+    wall_char = None
 
     # Draw all the tiles in the game map
     if fov_recompute:
@@ -54,17 +63,19 @@ def render_all(consoles, game_map, entities, player, fov_recompute, message_log)
 
             wall = not game_map.rooms[player.map_x][player.map_y].transparent[x][y]
 
+            # In FOV
             if game_map.rooms[player.map_x][player.map_y].fov[x, y]:
                 if wall:
-                    view_port_console.draw_char(x, y, wall_char, bg=None, fg=light_wall)
+                    view_port_console.draw_char(x, y, wall_char, bg=light_wall, fg=None)
                 else:
                     view_port_console.draw_char(x, y, ground_char, bg=None, fg=light_ground)
 
                 game_map.rooms[player.map_x][player.map_y].explored[x][y] = True
 
+            # Outside FOV, explored already
             elif game_map.rooms[player.map_x][player.map_y].explored[x][y]:
                 if wall:
-                    view_port_console.draw_char(x, y, wall_char, bg=None, fg=dark_wall)
+                    view_port_console.draw_char(x, y, wall_char, bg=dark_wall, fg=None)
                 else:
                     view_port_console.draw_char(x, y, ground_char, bg=None, fg=dark_ground)
 
@@ -88,9 +99,8 @@ def render_all(consoles, game_map, entities, player, fov_recompute, message_log)
 
     top_panel_console.draw_str(0, 0, player.name, fg=(255, 255, 255), bg=None)
 
-    # TODO is there a bug with displaying player health?
     top_panel_console.draw_str(0, 2, "Hits: ", fg=(255, 255, 255), bg=None)
-    render_status_blobs(top_panel_console, 6, 2, player.fighter.hits, player.fighter.max_hits, (200, 0, 0), (255, 255, 255))
+    render_status_characters(top_panel_console, 6, 2, player.fighter.hits, player.fighter.max_hits, 3, (200, 0, 0), (255, 255, 255))
 
     # Equipment
     if player.fighter.right_hand:

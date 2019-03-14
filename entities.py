@@ -75,6 +75,7 @@ def get_blocking_entities_at_location(entities, map_x, map_y, destination_room_x
     return None
 
 
+# TODO: rethink the way items are structured in the game.
 class Item(Entity):
     def __init__(self, game_map, room_id, room_x, room_y, name, char, colour, blocks=False, render_order=RenderOrder.ITEM, weapon=False, consumable=False):
         super().__init__(game_map, room_id, room_x, room_y, name, char, colour, blocks=blocks, render_order=render_order)
